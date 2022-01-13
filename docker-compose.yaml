@@ -1,0 +1,59 @@
+version: '3'
+services:
+  connect:
+    image: debezium/connect-with-oracle-jdbc:${DEBEZIUM_VERSION}
+    build:
+      context: debezium-with-oracle-jdbc
+      args:
+        DEBEZIUM_VERSION: ${DEBEZIUM_VERSION}
+    container_name: connector-oracle
+    ports:
+     - 8083:8083
+    environment:
+     - BOOTSTRAP_SERVERS=${EH_NAME}.servicebus.windows.net:9093
+     - GROUP_ID=oracle-dev
+     - CONFIG_STORAGE_TOPIC=oracle-dev-configs
+     - OFFSET_STORAGE_TOPIC=oracle-dev-offsets
+     - STATUS_STORAGE_TOPIC=oracle-dev-status
+     - CONNECT_REQUEST_TIMEOUT_MS=60000
+
+     # internal topic replication factors - auto 3x replication in Azure Storage
+     - CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR=1
+     - CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR=1
+     - CONNECT_STATUS_STORAGE_REPLICATION_FACTOR=1
+     
+     - CONNECT_REST_ADVERTISED_HOST_NAME=connect
+     - CONNECT_CONNECTIONS_MAX_IDLE_MS=180000
+     - CONNECT_METADATA_MAX_AGE_MS=180000
+
+     # required EH Kafka security settings
+     - CONNECT_SECURITY_PROTOCOL=SASL_SSL
+     - CONNECT_SASL_MECHANISM=PLAIN
+     - CONNECT_SASL_JAAS_CONFIG=org.apache.kafka.common.security.plain.PlainLoginModule required username="$$ConnectionString" password="${EH_CONNECTION_STRING}";
+     
+     - CONNECT_PRODUCER_SECURITY_PROTOCOL=SASL_SSL
+     - CONNECT_PRODUCER_SASL_MECHANISM=PLAIN
+     - CONNECT_PRODUCER_SASL_JAAS_CONFIG=org.apache.kafka.common.security.plain.PlainLoginModule required username="$$ConnectionString" password="${EH_CONNECTION_STRING}";
+     - CONNECT_PRODUCER_CONNECTIONS_MAX_IDLE_MS=180000
+     
+     # BUFFER AJUSTED FOR EVENT-HUB
+     - CONNECT_PRODUCER_BUFFER_MEMORY=400000
+
+     - CONNECT_CONSUMER_SECURITY_PROTOCOL=SASL_SSL
+     - CONNECT_CONSUMER_SASL_MECHANISM=PLAIN
+     - CONNECT_CONSUMER_SASL_JAAS_CONFIG=org.apache.kafka.common.security.plain.PlainLoginModule required username="$$ConnectionString" password="${EH_CONNECTION_STRING}";
+     - LOG_LEVEL=INFO
+     - LD_LIBRARY_PATH=/instant_client
+
+  oracle:
+    image: container-registry.oracle.com/database/enterprise:19.3.0.0
+    container_name: oracle
+    environment:
+      - ORACLE_PWD=top_secret
+    ports:
+      - 1521:1521
+    volumes:
+      - ${PWD}/oradata:/opt/oracle/oradata
+      - ${PWD}/oradata/recovery_area:/opt/oracle/oradata/recovery_area
+      - ${PWD}/ora-setup-scripts:/opt/oracle/scripts/setup
+      - ${PWD}/ora-startup-scripts:/opt/oracle/scripts/startup
